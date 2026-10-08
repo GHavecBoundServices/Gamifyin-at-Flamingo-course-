@@ -1,1 +1,157 @@
-https://claude.ai/artifact/AGDR7UJ9whZVcCSSNssvpF
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sunny Acres: Farm Energy</title>
+<style>
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);--bg:#f3f7ee;--fg:#243018;--card:#fff;--bd:#2b2b2b}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1c2416;--fg:#eaf3de;--card:#2b3622;--bd:#0c1008}}
+:root[data-theme="dark"]{--bg:#1c2416;--fg:#eaf3de;--card:#2b3622;--bd:#0c1008}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font-family:"Trebuchet MS",system-ui,sans-serif;display:flex;flex-direction:column;align-items:center;padding:8px}
+#wrap{width:100%;max-width:860px}
+.hud{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+.pill{background:var(--card);border:3px solid var(--bd);border-radius:14px;padding:4px 10px;font-weight:700;font-size:15px}
+.bar{flex:1 1 160px;background:var(--card);border:3px solid var(--bd);border-radius:14px;padding:3px 8px;font-size:13px;font-weight:700}
+.meter{height:10px;background:#ccc;border-radius:6px;overflow:hidden;margin-top:2px}
+#fill{height:100%;width:0;background:#43a047;transition:width .2s}
+.tools{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px}
+button{font:inherit;font-weight:700;background:var(--card);color:var(--fg);border:3px solid var(--bd);border-radius:14px;padding:6px 12px;cursor:pointer}
+button.on{background:#ffd54f;color:#243018}
+canvas{width:100%;max-width:100%;border:4px solid var(--bd);border-radius:18px;background:#8ad;touch-action:manipulation;display:block}
+small{display:block;margin-top:6px;opacity:.8}
+</style></head><body><div id="wrap">
+<div class="hud">
+<span class="pill">💰 $<span id="m">0</span></span>
+<span class="pill">📅 Day <span id="d">1</span>/20</span>
+<span class="pill" id="wn">—</span>
+<span class="pill" id="fc">Forecast: —</span>
+<span class="pill">🔋 <span id="st">0</span>/60 · $<span id="pr">1</span>/unit</span>
+<div class="bar">⚡ <span id="pw">0</span> / <span id="dm">0</span> units<div class="meter"><div id="fill"></div></div></div>
+</div>
+<div class="tools">
+<button id="b1" class="on">☀️ Solar panel $100</button>
+<button id="b2">🌬️ Wind turbine $150</button>
+<button id="b3">🧹 Remove (50% back)</button>
+<button id="b4">🔧 Repair tool</button>
+<button id="ra">🔧 Repair all</button>
+<button id="sl">💵 Sell surplus</button>
+<button id="ps">⏸ Pause</button>
+<button id="rs">🔄 Reset</button>
+</div>
+<canvas id="c" width="800" height="480"></canvas>
+<small>Tap a soil plot to build. The farm's power demand grows each day. Meet it to earn money; shortfalls cost you grid fees. Solar loves sun, wind loves gusts. Surplus power is stored; sell it when prices are high (cloudy and rainy days pay most). Equipment wears down and loses output, so repair it: rain muds panels, wind wears turbines. Watch the forecast!</small>
+</div>
+<script>
+const cv=document.getElementById('c'),x=cv.getContext('2d'),$=id=>document.getElementById(id);
+const W={
+vs:{n:'Very sunny',e:'☀️',sun:1.6,wind:.3,sky:['#2aa9ee','#bdeeff'],p:[.3,.4,.2,.05,.05]},
+s:{n:'Sunny',e:'🌤️',sun:1,wind:.5,sky:['#58bff2','#d2f2ff'],p:[.2,.3,.25,.15,.1]},
+c:{n:'Cloudy',e:'☁️',sun:.4,wind:.8,sky:['#9fb4c4','#d9e2e8'],p:[.05,.2,.3,.2,.25]},
+w:{n:'Windy',e:'🌬️',sun:.5,wind:2,sky:['#7cc3e6','#d6eef7'],p:[.05,.2,.25,.3,.2]},
+r:{n:'Rainy',e:'🌧️',sun:.15,wind:1,sky:['#6d7f8e','#a9b7c2'],p:[0,.1,.4,.2,.3]}};
+const K=['vs','s','c','w','r'],COST={solar:100,wind:150},DAY=12,COLS=8,ROWS=3,TW=80,TH=64,GX=80,GY=244;
+function pick(w){let r=Math.random(),a=0;for(let i=0;i<5;i++){a+=W[w].p[i];if(r<a)return K[i]}return 's'}
+const CAP=60,PRICE={vs:.8,s:1,c:1.5,w:1.2,r:2};
+const fixCost=i=>Math.ceil((100-S.hp[i])*.3),eff=i=>.4+.6*S.hp[i]/100;
+let S,clouds=[],drops=[],ang=0,hov=-1,paused=false,tool='solar';
+for(let i=0;i<9;i++)clouds.push({x:Math.random()*900-50,y:30+Math.random()*110,s:.7+Math.random()*.7,v:6+Math.random()*8});
+for(let i=0;i<90;i++)drops.push({x:Math.random()*800,y:Math.random()*480});
+function init(){S={money:1000,day:1,t:0,w:'s',next:'',tiles:Array(24).fill(null),hp:Array(24).fill(100),store:0,prod:0,dem:0,cov:0,over:false};S.next=pick('s')}
+function demand(){return 4+(S.day-1)*.7}
+function power(){let p=0;S.tiles.forEach((t,i)=>{if(t=='solar')p+=W[S.w].sun*eff(i);else if(t=='wind')p+=2*W[S.w].wind*eff(i)});return p}
+function update(dt){
+ang+=dt;for(const c of clouds){c.x+=c.v*dt*(S.w=='w'?4:1);if(c.x>880)c.x=-120}
+if(S.over)return;
+const p=power(),d=demand();
+S.money=Math.max(0,S.money+(Math.min(p,d)*2-Math.max(0,d-p)*.8)*dt);
+S.store=Math.min(CAP,S.store+Math.max(0,p-d)*dt);
+S.tiles.forEach((t,i)=>{if(t){const k=t=='solar'?.5+(S.w=='r'?.8:0)+(S.w=='vs'?.2:0):.4+(S.w=='w'?1:0);S.hp[i]=Math.max(0,S.hp[i]-k*dt)}});
+S.prod+=p*dt;S.dem+=d*dt;S.t+=dt;
+if(S.t>=DAY){if(S.prod>=S.dem)S.cov++;S.t=0;S.prod=S.dem=0;S.day++;if(S.day>20){S.over=true;S.day=20}else{S.w=S.next;S.next=pick(S.w)}}
+}
+function rr(a,b,w,h,r){x.beginPath();x.roundRect(a,b,w,h,r)}
+function st(f){x.lineWidth=3;x.strokeStyle='#2b2b2b';x.lineJoin='round';if(f){x.fillStyle=f;x.fill()}x.stroke()}
+function cloud(c,col){x.save();x.translate(c.x,c.y);x.scale(c.s,c.s);x.beginPath();x.arc(0,0,26,0,7);x.arc(30,-10,32,0,7);x.arc(62,0,26,0,7);x.rect(0,-2,62,24);st(col);x.restore()}
+function sun(cx,cy,r,cool){
+x.save();x.translate(cx,cy);x.rotate(ang*.3);
+for(let i=0;i<12;i++){x.rotate(Math.PI/6);x.beginPath();x.moveTo(r+6,-5);x.lineTo(r+22,0);x.lineTo(r+6,5);st('#ffb300')}
+x.restore();x.beginPath();x.arc(cx,cy,r,0,7);st('#ffe14d');
+x.fillStyle='#2b2b2b';
+if(cool){x.fillRect(cx-r*.7,cy-r*.3,r*.55,r*.3);x.fillRect(cx+r*.15,cy-r*.3,r*.55,r*.3);x.fillRect(cx-r*.2,cy-r*.25,r*.4,5)}
+else{x.beginPath();x.arc(cx-r*.35,cy-r*.15,4,0,7);x.arc(cx+r*.35,cy-r*.15,4,0,7);x.fill()}
+x.beginPath();x.arc(cx,cy+r*.1,r*.45,.15*Math.PI,.85*Math.PI);x.lineWidth=3;x.stroke()}
+function solar(cx,cy,g){
+x.beginPath();x.moveTo(cx-3,cy-8);x.lineTo(cx-3,cy);x.lineTo(cx+3,cy);x.lineTo(cx+3,cy-8);st('#888');
+x.beginPath();x.moveTo(cx-30,cy-8);x.lineTo(cx+30,cy-8);x.lineTo(cx+22,cy-38);x.lineTo(cx-22,cy-38);x.closePath();st('#2e6fd8');
+x.strokeStyle='#9cc4ff';x.lineWidth=1.5;x.beginPath();
+for(let i=1;i<4;i++){const f=i/4;x.moveTo(cx-30+f*60,cy-8);x.lineTo(cx-22+f*44,cy-38)}
+x.moveTo(cx-26,cy-23);x.lineTo(cx+26,cy-23);x.stroke();
+if(g>=1){x.fillStyle='#fff';const k=6+Math.sin(ang*4)*3;x.beginPath();x.moveTo(cx+8,cy-30-k);x.lineTo(cx+10,cy-30);x.lineTo(cx+8+k,cy-30);x.lineTo(cx+10,cy-28);x.fill()}}
+function turbine(cx,cy,sp,i){
+x.beginPath();x.moveTo(cx-6,cy);x.lineTo(cx+6,cy);x.lineTo(cx+2.5,cy-74);x.lineTo(cx-2.5,cy-74);x.closePath();st('#f4f4f4');
+const a0=ang*sp*3+i;
+for(let k=0;k<3;k++){x.save();x.translate(cx,cy-76);x.rotate(a0+k*2.094);x.beginPath();x.moveTo(0,-3);x.quadraticCurveTo(7,-18,1,-40);x.lineTo(-4,-18);x.closePath();st('#fff');x.restore()}
+x.beginPath();x.arc(cx,cy-76,5,0,7);st('#ff7043')}
+function draw(){
+const w=S.w,c=W[w];
+const g=x.createLinearGradient(0,0,0,220);g.addColorStop(0,c.sky[0]);g.addColorStop(1,c.sky[1]);x.fillStyle=g;x.fillRect(0,0,800,480);
+if(w=='vs')sun(690,80,44,true);else if(w=='s')sun(690,80,36,false);else if(w=='w'||w=='c'){x.globalAlpha=w=='c'?.35:.6;sun(690,80,30,false);x.globalAlpha=1}
+const nc={vs:1,s:3,c:9,w:6,r:9}[w];
+for(let i=0;i<nc;i++)cloud(clouds[i],w=='r'?'#8d98a3':w=='c'?'#dfe5ea':'#fff');
+x.beginPath();x.ellipse(200,230,330,80,0,Math.PI,0);st('#7cc75a');
+x.beginPath();x.ellipse(640,235,300,60,0,Math.PI,0);st('#66b84a');
+x.fillStyle='#8fd96a';x.fillRect(0,228,800,252);x.beginPath();x.moveTo(0,228);x.lineTo(800,228);x.stroke();
+x.fillStyle='#82cf5c';for(let i=0;i<8;i++)x.fillRect(0,240+i*32+(i%2)*8,800,14);
+// barn
+x.beginPath();x.rect(8,160,74,64);st('#d84b3a');
+x.beginPath();x.moveTo(0,162);x.lineTo(45,120);x.lineTo(90,162);x.closePath();st('#9e2f24');
+x.beginPath();x.rect(28,182,34,42);st('#fff');x.beginPath();x.moveTo(28,182);x.lineTo(62,224);x.moveTo(62,182);x.lineTo(28,224);x.stroke();
+// trees
+for(const tx of [760,735]){x.beginPath();x.rect(tx-4,190,8,36);st('#8d5a2b');x.beginPath();x.arc(tx,182,24,0,7);st('#3fae49')}
+// plots
+for(let i=0;i<24;i++){const cx=GX+(i%COLS)*TW,cy=GY+Math.floor(i/COLS)*TH;rr(cx+4,cy+4,TW-8,TH-8,12);st(i==hov?'#b07a4a':'#9a6a3c')}
+// objects
+for(let i=0;i<24;i++){const t=S.tiles[i];if(!t)continue;const cx=GX+(i%COLS)*TW+TW/2,cy=GY+Math.floor(i/COLS)*TH+TH-10;
+if(t=='solar')solar(cx,cy,c.sun);else turbine(cx,cy,c.wind,i);
+const h=S.hp[i];x.fillStyle='#333';x.fillRect(cx-22,cy+1,44,7);x.fillStyle=h>60?'#43a047':h>30?'#fbc02d':'#e53935';x.fillRect(cx-21,cy+2,42*h/100,5);
+if(h<40){x.font='18px serif';x.textAlign='center';x.fillText('🔧',cx+30,cy-30)}}
+// fence
+x.strokeStyle='#2b2b2b';for(let fx=0;fx<=800;fx+=40){x.fillStyle='#e8c88a';x.fillRect(fx+6,446,12,34);x.strokeRect(fx+6,446,12,34)}
+x.fillStyle='#e8c88a';x.fillRect(0,455,800,8);x.strokeRect(-2,455,804,8);
+// weather fx
+if(w=='r'){x.strokeStyle='#3f6fb5';x.lineWidth=2;x.beginPath();for(const d of drops){d.y+=9;d.x-=2;if(d.y>480){d.y=-10;d.x=Math.random()*800}x.moveTo(d.x,d.y);x.lineTo(d.x+2,d.y+12)}x.stroke()}
+if(w=='w'){x.strokeStyle='rgba(255,255,255,.85)';x.lineWidth=3;x.lineCap='round';for(let i=0;i<9;i++){const yy=60+i*45,xx=((ang*420+i*137)%900)-80;x.beginPath();x.moveTo(xx,yy);x.quadraticCurveTo(xx+30,yy-8,xx+60,yy);x.stroke()}x.lineCap='butt'}
+if(w=='c'||w=='r'){x.fillStyle='rgba(40,50,70,.12)';x.fillRect(0,0,800,480)}
+if(paused&&!S.over){x.fillStyle='rgba(0,0,0,.35)';x.fillRect(0,0,800,480);x.fillStyle='#fff';x.textAlign='center';x.font='bold 44px Trebuchet MS';x.fillText('⏸ Paused',400,235);x.font='18px Trebuchet MS';x.fillText('You can still build, repair and sell',400,268)}
+if(S.over){x.fillStyle='rgba(0,0,0,.6)';x.fillRect(0,0,800,480);x.fillStyle='#fff';x.textAlign='center';x.font='bold 40px Trebuchet MS';x.fillText('Harvest complete! 🌾',400,190);
+x.font='bold 26px Trebuchet MS';x.fillText('Days fully powered: '+S.cov+' / 20',400,240);x.fillText('Final cash: $'+Math.floor(S.money),400,278);x.font='20px Trebuchet MS';x.fillText('Tap to play again',400,325)}
+}
+function hud(){
+$('m').textContent=Math.floor(S.money);$('d').textContent=S.day;
+$('wn').textContent=W[S.w].e+' '+W[S.w].n;$('fc').textContent='Tomorrow: '+W[S.next].e+' '+W[S.next].n;
+const p=power(),d=demand();$('pw').textContent=p.toFixed(1);$('dm').textContent=d.toFixed(1);
+const f=$('fill');f.style.width=Math.min(100,p/d*100)+'%';f.style.background=p>=d?'#43a047':'#e53935';
+$('st').textContent=S.store.toFixed(0);$('pr').textContent=PRICE[S.w].toFixed(1);
+let c=0;S.tiles.forEach((t,i)=>{if(t)c+=fixCost(i)});
+$('ra').textContent='🔧 Repair all $'+c;$('sl').textContent='💵 Sell surplus +$'+Math.floor(S.store*PRICE[S.w])}
+function pos(e){const r=cv.getBoundingClientRect(),px=(e.clientX-r.left)*800/r.width,py=(e.clientY-r.top)*480/r.height;
+const c=Math.floor((px-GX)/TW),rw=Math.floor((py-GY)/TH);return(c>=0&&c<COLS&&rw>=0&&rw<ROWS)?rw*COLS+c:-1}
+cv.addEventListener('pointermove',e=>hov=pos(e));
+cv.addEventListener('pointerleave',()=>hov=-1);
+cv.addEventListener('pointerdown',e=>{
+if(S.over){init();return}
+const i=pos(e);if(i<0)return;hov=i;
+if(tool=='rm'){if(S.tiles[i]){S.money+=COST[S.tiles[i]]/2;S.tiles[i]=null}}
+else if(tool=='fix'){if(S.tiles[i]){const c=fixCost(i);if(c>0&&S.money>=c){S.money-=c;S.hp[i]=100}}}
+else if(!S.tiles[i]&&S.money>=COST[tool]){S.money-=COST[tool];S.tiles[i]=tool;S.hp[i]=100}});
+[['b1','solar'],['b2','wind'],['b3','rm'],['b4','fix']].forEach(([id,t])=>$(id).onclick=()=>{tool=t;['b1','b2','b3','b4'].forEach(b=>$(b).classList.toggle('on',b==id))});
+function setPause(v){paused=v;$('ps').textContent=v?'▶ Resume':'⏸ Pause';$('ps').classList.toggle('on',v)}
+$('ps').onclick=()=>{if(!S.over)setPause(!paused)};
+addEventListener('keydown',e=>{if(e.code=='Space'&&!S.over){e.preventDefault();setPause(!paused)}});
+$('rs').onclick=()=>{init();setPause(false)};
+$('ra').onclick=()=>{if(S.over)return;let c=0;S.tiles.forEach((t,i)=>{if(t)c+=fixCost(i)});if(c>0&&S.money>=c){S.money-=c;S.hp.fill(100)}};
+$('sl').onclick=()=>{if(S.over)return;S.money+=S.store*PRICE[S.w];S.store=0};
+init();let last=performance.now();
+function loop(n){const dt=Math.min(.1,(n-last)/1000);last=n;if(!paused)update(dt);draw();hud();requestAnimationFrame(loop)}
+requestAnimationFrame(loop);
+</script></body></html>
